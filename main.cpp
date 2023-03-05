@@ -9,6 +9,8 @@ const TGAColor red   = TGAColor(255, 0,   0,   255);
 Model *model = NULL;
 int *zbuffer = NULL;
 Vec3f camera(0,0,3);
+Vec3f eye(1,1,3);
+Vec3f center(0,0,0);
 
 const int width = 800;
 const int height = 800;
@@ -45,7 +47,7 @@ void line(int x0, int y0, int x1, int y1, TGAImage &image, TGAColor color) {
     } 
 } 
 
-
+//Retourne le minimume entre 3 entiers 
 int min(int a, int b, int c) {
     int res = 0;
     a <= b ? res = a : res = b;
@@ -53,6 +55,7 @@ int min(int a, int b, int c) {
     return res;
 }
 
+//Retourne le maximum entre 3 entiers
 int max(int a, int b, int c) {
     int res = 0;
     a >= b ? res = a : res = b;
@@ -111,6 +114,20 @@ Matrix viewport(int x, int y, int w, int h) {
     m[1][1] = h/2.f;
     m[2][2] = depth/2.f;
     return m;
+}
+
+Matrix lookat(Vec3f eye, Vec3f center, Vec3f up) {
+    Vec3f z = (eye-center).normalize();
+    Vec3f x = (up^z).normalize();
+    Vec3f y = (z^x).normalize();
+    Matrix res = Matrix::identity(4);
+    for (int i=0; i<3; i++) {
+        res[0][i] = x[i];
+        res[1][i] = y[i];
+        res[2][i] = z[i];
+        res[i][3] = -center[i];
+    }
+    return res;
 }
 
 //Fonction servant a calculer le barycentre d'un point pour un P pour un triangle
@@ -172,7 +189,7 @@ void colorierTriangle(Vec3i sc0, Vec3i sc1, Vec3i sc2, int *zbuffer, TGAImage &i
             hauteur_segment = sc1.y-sc0.y;
         }
         float alpha = (float)i/hauteur;
-        float beta  = (float)(i-(deuxieme_moitie ? sc1.y-sc0.y : 0))/hauteur_segment; // be careful: with above conditions no division by zero here
+        float beta  = (float)(i-(deuxieme_moitie ? sc1.y-sc0.y : 0))/hauteur_segment;
         Vec3i A = sc0 + Vec3f(sc2-sc0)*alpha;
         Vec3i B = {0, 0, 0};
         if(deuxieme_moitie) {
@@ -227,9 +244,10 @@ int main(int argc, char** argv) {
         zbuffer[i] = std::numeric_limits<int>::min();
     }
 
+    Matrix ModelView  = lookat(eye, center, Vec3f(0,1,0));
     Matrix Projection = Matrix::identity(4);
-    Matrix ViewPort = viewport(width/8, height/8, width*3/4, height*3/4);
-    Projection[3][2] = -1.f/camera.z;
+    Matrix ViewPort   = viewport(width/8, height/8, width*3/4, height*3/4);
+    Projection[3][2] = -1.f/(eye-center).norm();
     
 	for(int i = 0; i < model->nfaces();i++) {
 		std::vector<int> v = model->face(i);
@@ -241,9 +259,9 @@ int main(int argc, char** argv) {
         world_coords[1] = v1;
         world_coords[2] = v2;
         Vec3f screen_coords[3];
-        screen_coords[0] = matrice_to_vecteur(ViewPort*Projection*vecteur_to_matrice(v0));
-        screen_coords[1] = matrice_to_vecteur(ViewPort*Projection*vecteur_to_matrice(v1));
-        screen_coords[2] = matrice_to_vecteur(ViewPort*Projection*vecteur_to_matrice(v2));
+        screen_coords[0] = Vec3f(ViewPort*Projection*ModelView*Matrix(v0));
+        screen_coords[1] = Vec3f(ViewPort*Projection*ModelView*Matrix(v1));
+        screen_coords[2] = Vec3f(ViewPort*Projection*ModelView*Matrix(v2));
         //int x0 = (v0.x + 1.) * width/2. +.5;
 		//int y0 = (v0.y + 1.) * height/2. +.5;
         //int z0 = (v0.z + 1.); 
@@ -254,9 +272,10 @@ int main(int argc, char** argv) {
 		//int y2 = (v2.y + 1.) * height/2. +.5;
         //int z2 = (v2.z + 1.); 
 
-        Vec3f n = (world_coords[2]-world_coords[0])^(world_coords[1]-world_coords[0]);
-        n.normalize();
-        float intensity = n*light_dir;
+        //Vec3f n = (world_coords[2]-world_coords[0])^(world_coords[1]-world_coords[0]);
+        //n.normalize();
+        //float intensity = n*light_dir; Pas besoin dans cette lecon 
+        
 		// for(int j = 0; j < 3; j++) {
 		// 	Vec3f v0 = model->vert(v[j]);
 		// 	Vec3f v1 = model->vert(v[(j+1)%3]);
@@ -266,12 +285,12 @@ int main(int argc, char** argv) {
 		// 	int y1 = (v1.y + 1.) * height/2.;
 		// 	line(x0,y0,x1,y1, image, white);
 		// }
-        if(intensity>0) {
+        //if(intensity>0) {
             colorierTriangle(screen_coords[0], screen_coords[1], screen_coords[2], zbuffer, image, texture, i);
-        }
+        //}
 	}
 
-	image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
+	image.flip_vertically(); 
 	image.write_tga_file("output.tga");
     delete model;
     delete [] zbuffer;
